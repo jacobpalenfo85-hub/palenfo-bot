@@ -1,5 +1,4 @@
-
-    import os, asyncio, requests
+import os, asyncio, requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
