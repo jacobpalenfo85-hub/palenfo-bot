@@ -30,28 +30,4 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(get_scores(), parse_mode="Markdown")
-
-def auto_loop(app):
-    # Envoie tout seul à 9h00
-    sent_today = None
-    while True:
-        now = datetime.datetime.now()
-        if now.hour == 9 and now.minute == 0 and sent_today != now.date():
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    app.bot.send_message(chat_id=CHAT_ID, text=get_scores(), parse_mode="Markdown"),
-                    app.loop if hasattr(app, 'loop') else asyncio.get_event_loop()
-                )
-                sent_today = now.date()
-            except Exception as e:
-                print("Erreur auto:", e)
-        time.sleep(50)
-
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("score", score))
-    # Lance la boucle auto en arrière-plan
-    threading.Thread(target=auto_loop, args=(app,), daemon=True).start()
-    print("Bot Score Exact démarré...")
-    app.run_polling()
+ 
