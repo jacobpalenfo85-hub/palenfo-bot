@@ -1,39 +1,56 @@
-import os, datetime, requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHANNEL_ID")
-API_KEY = os.getenv("ODDS_API_KEY")
-def get_scores():
-    today = datetime.date.today().isoformat()
-    url = f"https://v3.football.api-sports.io/fixtures?date={today}"
-    headers = {"x-apisports-key": API_KEY}
+import os
+import math
+import telebot
+
+TOKEN = os.getenv("BOT_TOKEN")
+bot = telebot.TeleBot(TOKEN)
+
+def poisson(lam, k):
+    return (lam**k * math.exp(-lam)) / math.factorial(k)
+
+def predict(xg_home, xg_away):
+    results = []
+    for h in range(0, 6):
+        for a in range(0, 6):
+            p = poisson(xg_home, h) * poisson(xg_away, a)
+            results.append((p, h, a))
+    results.sort(reverse=True)
+    return results[:3]
+
+@bot.message_handler(commands=['start', 'help'])
+def start(message):
+    bot.reply_to(message, 
+        "⚽ Bot Score Exact\n\n"
+        "Utilisation :\n"
+        "/score 1.5 0.9\n\n"
+        "1er chiffre = buts attendus équipe à domicile\n"
+        "2ème chiffre = buts attendus équipe à l'extérieur\n\n"
+        "Exemple : /score 1.8 1.2"
+    )
+
+@bot.message_handler(commands=['score'])
+def score(message):
     try:
-        r = requests.get(url, headers=headers, timeout=20).json()
-        matchs = r.get("response", [])
-        if not matchs:
-            return "Aucun match aujourd'hui."
-        txt = "🎯 *SCORES EXACTS DU JOUR* 🎯\n\n"
-        for m in matchs[:15]:
-            home = m["teams"]["home"]["name"]
-            away = m["teams"]["away"]["name"]
-            league = m["league"]["name"]
-            # Prédiction simple
-            txt += f"🏆 {league}\n{home} vs {away}\n➡️ Score probable : 1-1 / 2-1\n\n"
-        txt += "Bonne chance 🍀"
-        return txt
-    except Exception as e:
-        return f"Erreur : {e}"
+        parts = message.text.split()
+        if len(parts) != 3:
+            bot.reply_to(message, "❌ Fais comme ça : /score 1.5 0.9")
+            return
+        
+        xg_home = float(parts[1])
+        xg_away = float(parts[2])
+        
+        top3 = predict(xg_home, xg_away)
+        
+        txt = f"📊 xG Domicile {xg_home} - xG Extérieur {xg_away}\n\n"
+        txt += "🏆 Score exact le plus probable :\n\n"
+        for i, (p, h, a) in enumerate(top3, 1):
+            txt += f"{i}. {h}-{a}  ({p*100:.1f}%)\n"
+        
+        txt += "\nCeci est une probabilité, pas une certitude."
+        bot.reply_to(message, txt)
+        
+    except ValueError:
+        bot.reply_to(message, "❌ Mets des chiffres : /score 1.5 0.9")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Salut ! Envoie /score pour les scores exacts du jour 🎯")
-
-async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(get_scores(), parse_mode="Markdown")
- 
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("score", score))
-    print("Bot Score Exact démarré...")
-    app.run_polling()
+print("Bot Score Exact démarré...")
+bot.infinity_polling()
