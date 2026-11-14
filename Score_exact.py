@@ -1,4 +1,4 @@
-import os, asyncio, threading, time, datetime, requests
+import os, datetime, requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 TOKEN = os.getenv("TELEGRAM_TOKEN")
