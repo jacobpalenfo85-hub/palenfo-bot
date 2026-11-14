@@ -1,68 +1,59 @@
-import os, math, requests, datetime
+import os, asyncio, threading, time, datetime, requests
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHANNEL = os.getenv("CHANNEL_ID", "@palenfo")
-ODDS_KEY = os.getenv("ODDS_API_KEY")
+TOKEN = os.getenv("BOT_TOKEN", "TON_TOKEN_ICI")
+CHAT_ID = os.getenv("CHAT_ID", "-1000000000000")
+API_KEY = os.getenv("API_FOOTBALL_KEY", "TA_CLE_API")
 
-def poisson(lam, k):
-    return (math.exp(-lam) * (lam ** k)) / math.factorial(k)
-
-def predict_score():
-    lam_home = 1.7
-    lam_away = 1.0
-    best = []
-    for h in range(0, 4):
-        for a in range(0, 4):
-            prob = poisson(lam_home, h) * poisson(lam_away, a)
-            best.append(((h, a), prob))
-    best.sort(key=lambda x: x[1], reverse=True)
-    return best[:3]
-
-def get_matches():
-    url = "https://api.the-odds-api.com/v4/sports/soccer/odds"
-    params = {"apiKey": ODDS_KEY, "regions": "eu", "markets": "h2h", "oddsFormat": "decimal"}
+def get_scores():
+    today = datetime.date.today().isoformat()
+    url = f"https://v3.football.api-sports.io/fixtures?date={today}"
+    headers = {"x-apisports-key": API_KEY}
     try:
-        r = requests.get(url, params=params, timeout=10)
-        return r.json()[:8]
-    except:
-        return []
-
-def format_coupon():
-    matches = get_matches()
-    if not matches:
-        return "Pas de matchs aujourd'hui, on revient demain."
-    txt = "🎯 SCORES EXACTS DU JOUR\n\nStrategie : Joue les 3 scores pour couvrir 35% de chances.\n\n"
-    for m in matches:
-        home = m.get("home_team", "?")
-        away = m.get("away_team", "?")
-        top3 = predict_score()
-        txt += f"⚽ {home} vs {away}\n"
-        for (h,a), prob in top3:
-            txt += f"  -> {h}-{a}  ({int(prob*100)}%)\n"
-        txt += "\n"
-    txt += "Mise conseillee : 500F par score. Joue responsable."
-    return txt
+        r = requests.get(url, headers=headers, timeout=20).json()
+        matchs = r.get("response", [])
+        if not matchs:
+            return "Aucun match aujourd'hui."
+        txt = "🎯 *SCORES EXACTS DU JOUR* 🎯\n\n"
+        for m in matchs[:15]:
+            home = m["teams"]["home"]["name"]
+            away = m["teams"]["away"]["name"]
+            league = m["league"]["name"]
+            # Prédiction simple
+            txt += f"🏆 {league}\n{home} vs {away}\n➡️ Score probable : 1-1 / 2-1\n\n"
+        txt += "Bonne chance 🍀"
+        return txt
+    except Exception as e:
+        return f"Erreur : {e}"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bot Score Exact Palenfo pret ! Tape /score")
+    await update.message.reply_text("Salut ! Envoie /score pour les scores exacts du jour 🎯")
 
-async def score_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = format_coupon()
-    await update.message.reply_text(txt)
+async def score(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(get_scores(), parse_mode="Markdown")
 
-async def job_auto(context: ContextTypes.DEFAULT_TYPE):
-    txt = format_coupon()
-    await context.bot.send_message(chat_id=CHANNEL, text=txt)
-
-def main():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("score", score_now))
-    app.job_queue.run_daily(job_auto, time=datetime.time(hour=9, minute=0))
-    print("BOT SCORE EXACT DEMARRE")
-    app.run_polling()
+def auto_loop(app):
+    # Envoie tout seul à 9h00
+    sent_today = None
+    while True:
+        now = datetime.datetime.now()
+        if now.hour == 9 and now.minute == 0 and sent_today != now.date():
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    app.bot.send_message(chat_id=CHAT_ID, text=get_scores(), parse_mode="Markdown"),
+                    app.loop if hasattr(app, 'loop') else asyncio.get_event_loop()
+                )
+                sent_today = now.date()
+            except Exception as e:
+                print("Erreur auto:", e)
+        time.sleep(50)
 
 if __name__ == "__main__":
-    main()
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("score", score))
+    # Lance la boucle auto en arrière-plan
+    threading.Thread(target=auto_loop, args=(app,), daemon=True).start()
+    print("Bot Score Exact démarré...")
+    app.run_polling()
