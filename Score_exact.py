@@ -1,11 +1,9 @@
 import os, asyncio, threading, time, datetime, requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-
-TOKEN = os.getenv("BOT_TOKEN", "TON_TOKEN_ICI")
-CHAT_ID = os.getenv("CHAT_ID", "-1000000000000")
-API_KEY = os.getenv("API_FOOTBALL_KEY", "TA_CLE_API")
-
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHANNEL_ID")
+API_KEY = os.getenv("ODDS_API_KEY")
 def get_scores():
     today = datetime.date.today().isoformat()
     url = f"https://v3.football.api-sports.io/fixtures?date={today}"
